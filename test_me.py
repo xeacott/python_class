@@ -1,6 +1,5 @@
 # Project File
 
-
 """
 This file serves as Dominick Bellofatto and Joe Eacott's CS2005 project.
 
@@ -13,13 +12,44 @@ We can use this information to predict when a player may have above average nigh
 which people like to refer to as a "hot" game. We'll formally define a "hot" game as shooting
 more than 7% above a player's average.
 
+#
+# ::Note seaborn will crash and to fix, you must make these changes to:
+site_packages > seaborn > rcmod.py
+
+1. Add the following import statement:
+import cycler
+
+2. Change line 492 to this instead:
+matplotlib.rcParams['axes.prop_cycle'] = cycler.cycler(color=colors)
+
+
 """
-import matplotlib.pyplot as plt
-import numpy
-import pandas
+from pip._internal import main as install
 import requests
 import argparse
 import re
+
+try:
+    import matplotlib
+    from matplotlib import pyplot
+    from matplotlib import cycler
+except ImportError:
+    install(['install', 'matplotlib'])
+
+try:
+    import pandas
+except ImportError:
+    install(['install', 'pandas'])
+
+try:
+    import nba_api
+except ImportError:
+    install(['install', 'nba_api'])
+
+try:
+    import nbashots
+except ImportError:
+    install(['install', 'nbashots'])
 
 from nba_api.stats.static import players as player_ref
 from nba_api.stats.endpoints import shotchartdetail
@@ -88,7 +118,6 @@ class PlayerInfo(object):
             ))
         return player_id
 
-
     def get_team_id(self, player_id):
         """Match player id to team id which is necessary for shot info.
 
@@ -151,9 +180,8 @@ class ShotChart(object):
         """
         super(ShotChart, self)
 
-        self.player_info = player_info
-        self.x_series = pandas.Series(self.player_info.x_loc)
-        self.y_series = pandas.Series(self.player_info.y_loc)
+        self.x_series = pandas.Series(player_info.x_loc)
+        self.y_series = pandas.Series(player_info.y_loc)
 
         self.create_shot_chart_plot()
 
@@ -161,7 +189,7 @@ class ShotChart(object):
         """Docstring."""
 
         nba_chart.shot_chart(self.x_series, self.y_series)
-        plt.show()
+        pyplot.show()
 
 
 def main():
@@ -184,7 +212,6 @@ def main():
         "Enter:"
     ))
 
-
     try:
         last_name, first_name = player.split(',')
     except ValueError:
@@ -193,6 +220,7 @@ def main():
         player_info = PlayerInfo(last_name, first_name, num_games)
         if player_info.player_id is not None:
             ShotChart(player_info)
+
 
 if __name__ == '__main__':
 
