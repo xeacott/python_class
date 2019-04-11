@@ -15,40 +15,28 @@ more than 7% above a player's average.
 
 """
 import matplotlib.pyplot as plt
-import numpy as np
+import numpy
+import pandas
+import requests
 import argparse
 import re
 
 from nba_api.stats.static import players as player_ref
+from nba_api.stats.endpoints import shotchartdetail
+from nba_api.stats.endpoints import commonplayerinfo
 import nbashots as nba_chart
 
-#
-# x_values = np.linspace(-np.pi, np.pi, 1000)
-#
-#
-# # Equation 1
-# equation1 = (np.multiply(
-#     np.power(np.e, -x_values),
-#     np.sin(np.multiply(x_values, 10)))
-# )
-#
-#
-# plt.plot(x_values, equation1, 'r')
-#
-# plt.xticks(ticks=[-np.pi, -np.pi/2, 0, np.pi/2, np.pi],
-#            labels=['-pi', '-pi/2', '0', 'pi/2', 'pi'])
-# plt.show()
 
 class PlayerInfo(object):
 
-    def __init__(self, player_lastname, player_firstname):
-        """Class to calculate account amount.
+    def __init__(self, player_lastname, player_firstname, num_games):
+        """Information about player such as name, id, and shot dataframe info.
 
-        :param float amount_original:
-            Amount of money in a bank account initially.
+        :param basestring player_lastname:
+            Last name of an NBA Player provided by user.
 
-        :param float interest_rate:
-            Rate of interest for the account specified in a decimal.
+        :param basestring player_firstname:
+            First name of an NBA Player provided by user.
 
         :param int time:
             Number of years the account will compound over given as integer.
@@ -59,15 +47,22 @@ class PlayerInfo(object):
         """
         super(PlayerInfo, self)
 
+        self.player_lastname = player_lastname
+        self.player_firstname = player_firstname
+        self.num_games = num_games
+
         self.player_id = None
+        self.team_id = None
+        self.x_loc = []
+        self.y_loc = []
 
-        player_id = self.player_reg_expression(player_lastname, player_firstname)
-        test_value = self.get_player_id(player_id)
+        self.player_id = self.get_player_id(self.player_lastname, self.player_firstname)
+        if self.player_id:
+            self.team_id = self.get_team_id(self.player_id)
+            self.get_player_shot_info(self.player_id, self.team_id, self.num_games)
 
-        if test_value:
-            self.player_id = test_value
 
-    def player_reg_expression(self, player_lastname, player_firstname):
+    def get_player_id(self, player_lastname, player_firstname):
         """Match user input to legal nba player.
 
         :param basestring player_lastname:
@@ -80,31 +75,124 @@ class PlayerInfo(object):
         :rtype int
         """
         player_dict = player_ref.get_players()
+        player_id = None
 
         for i in range(len(player_dict)):
-            if re.search((player_dict[i]['last_name']).lower(), player_lastname.lower()):
-                if re.search((player_dict[i]['first_name']).lower(), player_firstname.lower()):
-                     return player_dict[i]['id']
+            if re.search((player_dict[i].get('last_name')).lower(), player_lastname.lower()):
+                if re.search((player_dict[i].get('first_name')).lower(), player_firstname.lower()):
+                    player_id = player_dict[i].get('id')
 
-    def get_player_id(self, player_id):
-        """Docstring"""
-        test_value = player_id
-        return test_value
+        if player_id is None:
+            print("Player not found, check your spelling of {} or please choose another player.".format(
+                player_lastname + player_firstname
+            ))
+        return player_id
 
+
+    def get_team_id(self, player_id):
+        """Match player id to team id which is necessary for shot info.
+
+        :param int player_id:
+            Player ID that is associated with player user provided.
+
+        :returns team_id
+        :rtype int
+        """
+        try:
+            current_team_id = commonplayerinfo.CommonPlayerInfo(
+                player_id=player_id
+            )
+        except requests.exceptions.ConnectionError:
+            print("Request failed.")
+        else:
+            return current_team_id.common_player_info.data['data'][0][16]
+
+    def get_player_shot_info(self, player_id, team_id, num_games):
+        """Match player id to shot chart information.
+
+        :param int player_id:
+            Player ID that is associated with player user provided.
+
+        :param int team_id:
+            Team ID that is associated with the player user provided.
+
+        :param int num_games:
+            Indicate length of shot info to acquire.
+
+        :returns object
+        :rtype ShotChartDetail
+        """
+        try:
+            current_shot_chart_info = shotchartdetail.ShotChartDetail(
+                league_id='00',
+                season_type_all_star='Regular Season',
+                team_id=team_id,
+                player_id=player_id,
+                last_n_games=num_games
+            )
+
+        except requests.exceptions.ConnectionError:
+            print("Request failed.")
+
+        else:
+            for i in range(len(current_shot_chart_info.shot_chart_detail.data['data'])):
+                self.x_loc.append(current_shot_chart_info.shot_chart_detail.data['data'][i][17])
+                self.y_loc.append(current_shot_chart_info.shot_chart_detail.data['data'][i][18])
+
+
+class ShotChart(object):
+
+    def __init__(self, player_info):
+        """Create and maintain matplotlib shot chart information.
+
+        :param object player_info:
+            Player information object.
+
+        """
+        super(ShotChart, self)
+
+        self.player_info = player_info
+        self.x_series = pandas.Series(self.player_info.x_loc)
+        self.y_series = pandas.Series(self.player_info.y_loc)
+
+        self.create_shot_chart_plot()
+
+    def create_shot_chart_plot(self):
+        """Docstring."""
+
+        nba_chart.shot_chart(self.x_series, self.y_series)
+        plt.show()
 
 
 def main():
 
     player = input(
-        "Please provide an NBA player to analyze in the format of Lastname, Firstname:")
+        "Please provide an NBA player to analyze in the format of Lastname, Firstname.\n"
+        "Here are a few examples to get started:\n"
+        "{}\n"
+        "{}\n"
+        "{}\n"
+        "Enter:".format(
+            "Rose, Derrick",
+            "James, LeBron",
+            "Harden, James"
+        ))
+
+    num_games = int(input(
+        "Enter the amount of games you'd like to view statistics for. This can be in the"
+        "format of 10 games, 30 games, or say 0 to indicate a season-length.\n"
+        "Enter:"
+    ))
+
 
     try:
         last_name, first_name = player.split(',')
     except ValueError:
-        print("Did not provide correct format check your comma.")
+        print("Did not provide correct format for {}.".format(player))
     else:
-        PlayerInfo(last_name, first_name)
-
+        player_info = PlayerInfo(last_name, first_name, num_games)
+        if player_info.player_id is not None:
+            ShotChart(player_info)
 
 if __name__ == '__main__':
 
