@@ -24,15 +24,22 @@ matplotlib.rcParams['axes.prop_cycle'] = cycler.cycler(color=colors)
 
 
 """
-from pip._internal import main as install
+try:
+    from pip._internal import main as install
+except ModuleNotFoundError:
+    from pip import main as install
+
 import requests
 import argparse
 import re
+import numpy as np
 
 try:
-    import matplotlib
-    from matplotlib import pyplot
-    from matplotlib import cycler
+    import matplotlib as mpl
+    from matplotlib import colors
+    from matplotlib import colorbar
+    from matplotlib import pyplot as plt
+    from matplotlib.patches import Circle, Rectangle, Arc
 except ImportError:
     install(['install', 'matplotlib'])
 
@@ -54,7 +61,15 @@ except ImportError:
 from nba_api.stats.static import players as player_ref
 from nba_api.stats.endpoints import shotchartdetail
 from nba_api.stats.endpoints import commonplayerinfo
-import nbashots as nba_chart
+
+
+cdict = {
+    'blue': [(0.0, 0.6313725709915161, 0.6313725709915161), (0.25, 0.4470588266849518, 0.4470588266849518), (0.5, 0.29019609093666077, 0.29019609093666077), (0.75, 0.11372549086809158, 0.11372549086809158), (1.0, 0.05098039284348488, 0.05098039284348488)],
+    'green': [(0.0, 0.7333333492279053, 0.7333333492279053), (0.25, 0.572549045085907, 0.572549045085907), (0.5, 0.4156862795352936, 0.4156862795352936), (0.75, 0.0941176488995552, 0.0941176488995552), (1.0, 0.0, 0.0)],
+    'red': [(0.0, 0.9882352948188782, 0.9882352948188782), (0.25, 0.9882352948188782, 0.9882352948188782), (0.5, 0.9843137264251709, 0.9843137264251709), (0.75, 0.7960784435272217, 0.7960784435272217), (1.0, 0.40392157435417175, 0.40392157435417175)]
+}
+
+mymap = mpl.colors.LinearSegmentedColormap('my_colormap', cdict, 1024)
 
 
 class PlayerInfo(object):
@@ -81,15 +96,20 @@ class PlayerInfo(object):
         self.player_firstname = player_firstname
         self.num_games = num_games
 
+        # Set player specific information
         self.player_id = None
         self.team_id = None
-        self.x_loc = []
-        self.y_loc = []
+
+        # Set DataFrame
+        self.shot_df = None
+        self.shooting_percentage = None
+        self.hb_shot = None
 
         self.player_id = self.get_player_id(self.player_lastname, self.player_firstname)
         if self.player_id:
             self.team_id = self.get_team_id(self.player_id)
-            self.get_player_shot_info(self.player_id, self.team_id, self.num_games)
+            self.shot_df = self.get_player_shot_info(self.player_id, self.team_id, self.num_games)
+            self.shooting_percentage, self.hb_shot = self.get_player_shooting_pcts(self.shot_df)
 
 
     def get_player_id(self, player_lastname, player_firstname):
@@ -148,8 +168,8 @@ class PlayerInfo(object):
         :param int num_games:
             Indicate length of shot info to acquire.
 
-        :returns object
-        :rtype ShotChartDetail
+        :returns DataFrame
+        :rtype pandas.DataFrame
         """
         try:
             current_shot_chart_info = shotchartdetail.ShotChartDetail(
@@ -164,9 +184,44 @@ class PlayerInfo(object):
             print("Request failed.")
 
         else:
-            for i in range(len(current_shot_chart_info.shot_chart_detail.data['data'])):
-                self.x_loc.append(current_shot_chart_info.shot_chart_detail.data['data'][i][17])
-                self.y_loc.append(current_shot_chart_info.shot_chart_detail.data['data'][i][18])
+            shots = current_shot_chart_info.shot_chart_detail.data['data']
+            headers = current_shot_chart_info.shot_chart_detail.data['headers']
+            shot_df = pandas.DataFrame(shots, columns=headers)
+            return shot_df
+
+    def get_player_shooting_pcts(self, shot_df, gridnum=30):
+        """Calculate shooting percentages for a player.
+
+        :param DataFrame shot_df:
+            pandas.DataFrame object containing shot and header information.
+        :param int gridnum:
+            Default grid size.
+
+        :returns shooting_percentage, shot_made
+        :rtype array
+        """
+        x = shot_df.LOC_X[shot_df['LOC_X'] < 425.1]
+        y = shot_df.LOC_Y[shot_df['LOC_Y'] < 425.1]
+
+        x_made = shot_df.LOC_X[(shot_df['SHOT_MADE_FLAG'] == 1) & (shot_df['LOC_X'] < 425.1)]
+        y_made = shot_df.LOC_Y[(shot_df['SHOT_MADE_FLAG'] == 1) & (shot_df['LOC_Y'] < 425.1)]
+
+        # Compute number of shots taken from each hexbin location
+        hb_shot = plt.hexbin(x, y, gridsize=gridnum, extent=(-250, 250, 425, -50))
+        plt.close()
+
+        # Compute number of shots taken from each hexbin location
+        hb_made = plt.hexbin(x_made, y_made, gridsize=gridnum, extent=(-250, 250, 425, -50))
+        plt.close()
+
+        # Compute shooting percentage, effectively calculating FGA / FGM
+        shooting_pct_locations = hb_made.get_array() / hb_shot.get_array()
+        print(shooting_pct_locations)
+
+        # If a player takes 0 shots, make sure both FGA and FGM are set to 0 to null the data point
+        shooting_pct_locations[np.isnan(shooting_pct_locations)] = 0
+        print(shooting_pct_locations)
+        return (shooting_pct_locations, hb_shot)
 
 
 class ShotChart(object):
@@ -180,16 +235,88 @@ class ShotChart(object):
         """
         super(ShotChart, self)
 
-        self.x_series = pandas.Series(player_info.x_loc)
-        self.y_series = pandas.Series(player_info.y_loc)
+        self.player_info = player_info
+        self.create_shot_chart_plot(
+            self.player_info.shooting_percentage,
+            self.player_info.hb_shot)
 
-        self.create_shot_chart_plot()
+    @staticmethod
+    def draw_court(ax=None, color="black", lw=2, outer_lines=False):
+        """Create the court based on dimensions and places shapes accordingly.
 
-    def create_shot_chart_plot(self):
-        """Docstring."""
+        ::Note this method will draw a basketball court with respect to the x and y
+        locations of the shot itself. The NBA API endpoint returns x and y coordinates
+        with respect to under the basketball hoop as (0, 0). Therefore, these dimensions
+        are calculated to be accurate only with respect to the NBA API endpoint.
 
-        nba_chart.shot_chart(self.x_series, self.y_series)
-        pyplot.show()
+        This was taken directly from nba_chart repo, which is a public repository.
+        """
+        if ax is None:
+            ax = plt.gca()
+        hoop = Circle((0, 0), radius=7.5, linewidth=lw, color=color, fill=False)
+        backboard = Rectangle((-30, -7.5), 60, -1, linewidth=lw, color=color)
+        outer_box = Rectangle((-80, -47.5), 160, 190, linewidth=lw, color=color, fill=False)
+        inner_box = Rectangle((-60, -47.5), 120, 190, linewidth=lw, color=color, fill=False)
+        top_free_throw = Arc((0, 142.5), 120, 120, theta1=0, theta2=180, linewidth=lw, color=color, fill=False)
+        bottom_free_throw = Arc((0, 142.5), 120, 120, theta1=180, theta2=0, linewidth=lw, color=color, linestyle='dashed')
+        restricted = Arc((0, 0), 80, 80, theta1=0, theta2=180, linewidth=lw, color=color)
+        corner_three_a = Rectangle((-220, -47.5), 0, 140, linewidth=lw, color=color)
+        corner_three_b = Rectangle((220, -47.5), 0, 140, linewidth=lw, color=color)
+        three_arc = Arc((0, 0), 475, 475, theta1=22, theta2=158, linewidth=lw, color=color)
+        center_outer_arc = Arc((0, 422.5), 120, 120, theta1=180, theta2=0, linewidth=lw, color=color)
+        center_inner_arc = Arc((0, 422.5), 40, 40, theta1=180, theta2=0, linewidth=lw, color=color)
+        court_elements = [hoop, backboard, outer_box, inner_box, top_free_throw,
+                          bottom_free_throw, restricted, corner_three_a,
+                          corner_three_b, three_arc, center_outer_arc,
+                          center_inner_arc]
+        if outer_lines:
+            outer_lines = Rectangle((-250, -47.5), 500, 470, linewidth=lw, color=color, fill=False)
+            court_elements.append(outer_lines)
+
+        for element in court_elements:
+            ax.add_patch(element)
+
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return ax
+
+    def create_shot_chart_plot(self, shooting_pct, shot_num, plot_size=(12, 8), gridnum=30):
+        """Show plot that has X and Y coordinate values for court."""
+
+        # Draw figure and court
+        fig = plt.figure(figsize=plot_size)
+
+        # Where the plot places within the figure
+        ax = plt.axes([0.1, 0.1, 0.8, 0.8])
+        self.draw_court(outer_lines=False)
+
+        plt.title("Shot chart for{} {} for the last {} games".format(
+            self.player_info.player_firstname,
+            self.player_info.player_lastname,
+            self.player_info.num_games
+        ))
+
+        # Set court limits
+        plt.xlim(-250, 250)
+        plt.ylim(400, -25)
+
+        for i, shots in enumerate(shooting_pct):
+            restricted = Circle(shot_num.get_offsets()[i], radius=shot_num.get_array()[i],
+                                color=mymap(shots), alpha=0.8, fill=True)
+            if restricted.radius > 240 / gridnum: restricted.radius = 240 / gridnum
+            ax.add_patch(restricted)
+
+        # Draw color bar to indicate percentage as heatmap
+        ax2 = fig.add_axes([0.92, 0.1, 0.02, 0.8])
+        cb = mpl.colorbar.ColorbarBase(ax2, cmap=mymap, orientation='vertical')
+        cb.set_label('Shooting %')
+        cb.set_ticks([0.0, 0.25, 0.5, 0.75, 1.0])
+        cb.set_ticklabels(['0%', '25%', '50%', '75%', '100%'])
+
+        plt.show()
+        return ax
 
 
 def main():
@@ -211,6 +338,9 @@ def main():
         "format of 10 games, 30 games, or say 0 to indicate a season-length.\n"
         "Enter:"
     ))
+
+    if num_games == 0:
+        num_games = 82
 
     try:
         last_name, first_name = player.split(',')
