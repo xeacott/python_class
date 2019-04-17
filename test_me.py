@@ -12,8 +12,7 @@ We can use this information to predict when a player may have above average nigh
 which people like to refer to as a "hot" game. We'll formally define a "hot" game as shooting
 more than 7% above a player's average.
 
-#
-# ::Note seaborn will crash and to fix, you must make these changes to:
+    ::Note seaborn will crash and to fix, you must make these changes to:
 site_packages > seaborn > rcmod.py
 
 1. Add the following import statement:
