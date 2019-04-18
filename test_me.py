@@ -23,22 +23,19 @@ matplotlib.rcParams['axes.prop_cycle'] = cycler.cycler(color=colors)
 
 
 """
+# Standard Imports
+import requests
+import argparse
+import re
+import numpy
+
 try:
     from pip._internal import main as install
 except ModuleNotFoundError:
     from pip import main as install
 
-import requests
-import argparse
-import re
-import numpy as np
-
 try:
-    import matplotlib as mpl
-    from matplotlib import colors
-    from matplotlib import colorbar
-    from matplotlib import pyplot as plt
-    from matplotlib.patches import Circle, Rectangle, Arc
+    import matplotlib
 except ImportError:
     install(['install', 'matplotlib'])
 
@@ -52,14 +49,18 @@ try:
 except ImportError:
     install(['install', 'nba_api'])
 
-try:
-    import nbashots
-except ImportError:
-    install(['install', 'nbashots'])
+# 3rd Party Imports
+from matplotlib import colors
+from matplotlib import colorbar
+from matplotlib import pyplot as plt
+from matplotlib.patches import Circle, Rectangle, Arc
 
 from nba_api.stats.static import players as player_ref
 from nba_api.stats.endpoints import shotchartdetail
 from nba_api.stats.endpoints import commonplayerinfo
+
+# Relative Imports
+# none
 
 
 cdict = {
@@ -68,7 +69,7 @@ cdict = {
     'red': [(0.0, 0.9882352948188782, 0.9882352948188782), (0.25, 0.9882352948188782, 0.9882352948188782), (0.5, 0.9843137264251709, 0.9843137264251709), (0.75, 0.7960784435272217, 0.7960784435272217), (1.0, 0.40392157435417175, 0.40392157435417175)]
 }
 
-mymap = mpl.colors.LinearSegmentedColormap('my_colormap', cdict, 1024)
+mymap = colors.LinearSegmentedColormap('my_colormap', cdict, 1024)
 
 
 class PlayerInfo(object):
