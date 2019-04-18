@@ -12,6 +12,8 @@ We can use this information to predict when a player may have above average nigh
 which people like to refer to as a "hot" game. We'll formally define a "hot" game as shooting
 more than 7% above a player's average.
 
+    ::Note link used: https://danvatterott.com/blog/2015/12/22/creating-nba-shot-charts/
+
     ::Note seaborn will crash and to fix, you must make these changes to:
 site_packages > seaborn > rcmod.py
 
@@ -210,17 +212,15 @@ class PlayerInfo(object):
         hb_shot = plt.hexbin(x, y, gridsize=gridnum, extent=(-250, 250, 425, -50))
         plt.close()
 
-        # Compute number of shots taken from each hexbin location
+        # Compute number of shots made from each hexbin location
         hb_made = plt.hexbin(x_made, y_made, gridsize=gridnum, extent=(-250, 250, 425, -50))
         plt.close()
 
         # Compute shooting percentage, effectively calculating FGA / FGM
         shooting_pct_locations = hb_made.get_array() / hb_shot.get_array()
-        print(shooting_pct_locations)
 
         # If a player takes 0 shots, make sure both FGA and FGM are set to 0 to null the data point
-        shooting_pct_locations[np.isnan(shooting_pct_locations)] = 0
-        print(shooting_pct_locations)
+        shooting_pct_locations[numpy.isnan(shooting_pct_locations)] = 0
         return (shooting_pct_locations, hb_shot)
 
 
@@ -284,7 +284,6 @@ class ShotChart(object):
 
     def create_shot_chart_plot(self, shooting_pct, shot_num, plot_size=(12, 8), gridnum=30):
         """Show plot that has X and Y coordinate values for court."""
-
         # Draw figure and court
         fig = plt.figure(figsize=plot_size)
 
@@ -292,6 +291,7 @@ class ShotChart(object):
         ax = plt.axes([0.1, 0.1, 0.8, 0.8])
         self.draw_court(outer_lines=False)
 
+        # Add main title to graph
         plt.title("Shot chart for{} {} for the last {} games".format(
             self.player_info.player_firstname,
             self.player_info.player_lastname,
@@ -310,7 +310,7 @@ class ShotChart(object):
 
         # Draw color bar to indicate percentage as heatmap
         ax2 = fig.add_axes([0.92, 0.1, 0.02, 0.8])
-        cb = mpl.colorbar.ColorbarBase(ax2, cmap=mymap, orientation='vertical')
+        cb = colorbar.ColorbarBase(ax2, cmap=mymap, orientation='vertical')
         cb.set_label('Shooting %')
         cb.set_ticks([0.0, 0.25, 0.5, 0.75, 1.0])
         cb.set_ticklabels(['0%', '25%', '50%', '75%', '100%'])
