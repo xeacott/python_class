@@ -176,7 +176,8 @@ class PlayerInfo(object):
                 season_type_all_star='Regular Season',
                 team_id=team_id,
                 player_id=player_id,
-                last_n_games=num_games
+                last_n_games=num_games,
+                context_measure_simple='FGA'
             )
 
         except requests.exceptions.ConnectionError:
@@ -199,10 +200,10 @@ class PlayerInfo(object):
         :returns shooting_percentage, shot_made
         :rtype array
         """
-        x = shot_df.LOC_X[shot_df['LOC_X'] < 425.1]
+        x = shot_df.LOC_X[shot_df['LOC_Y'] < 425.1]
         y = shot_df.LOC_Y[shot_df['LOC_Y'] < 425.1]
 
-        x_made = shot_df.LOC_X[(shot_df['SHOT_MADE_FLAG'] == 1) & (shot_df['LOC_X'] < 425.1)]
+        x_made = shot_df.LOC_X[(shot_df['SHOT_MADE_FLAG'] == 1) & (shot_df['LOC_Y'] < 425.1)]
         y_made = shot_df.LOC_Y[(shot_df['SHOT_MADE_FLAG'] == 1) & (shot_df['LOC_Y'] < 425.1)]
 
         # Compute number of shots taken from each hexbin location
