@@ -12,6 +12,8 @@ We can use this information to predict when a player may have above average nigh
 which people like to refer to as a "hot" game. We'll formally define a "hot" game as shooting
 more than 7% above a player's average.
 
+    ::Note link used: https://danvatterott.com/blog/2015/12/22/creating-nba-shot-charts/
+
     ::Note seaborn will crash and to fix, you must make these changes to:
 site_packages > seaborn > rcmod.py
 
@@ -23,22 +25,19 @@ matplotlib.rcParams['axes.prop_cycle'] = cycler.cycler(color=colors)
 
 
 """
+# Standard Imports
+import requests
+import argparse
+import re
+import numpy
+
 try:
     from pip._internal import main as install
 except ModuleNotFoundError:
     from pip import main as install
 
-import requests
-import argparse
-import re
-import numpy as np
-
 try:
-    import matplotlib as mpl
-    from matplotlib import colors
-    from matplotlib import colorbar
-    from matplotlib import pyplot as plt
-    from matplotlib.patches import Circle, Rectangle, Arc
+    import matplotlib
 except ImportError:
     install(['install', 'matplotlib'])
 
@@ -52,14 +51,18 @@ try:
 except ImportError:
     install(['install', 'nba_api'])
 
-try:
-    import nbashots
-except ImportError:
-    install(['install', 'nbashots'])
+# 3rd Party Imports
+from matplotlib import colors
+from matplotlib import colorbar
+from matplotlib import pyplot as plt
+from matplotlib.patches import Circle, Rectangle, Arc
 
 from nba_api.stats.static import players as player_ref
 from nba_api.stats.endpoints import shotchartdetail
 from nba_api.stats.endpoints import commonplayerinfo
+
+# Relative Imports
+# none
 
 
 cdict = {
@@ -68,7 +71,7 @@ cdict = {
     'red': [(0.0, 0.9882352948188782, 0.9882352948188782), (0.25, 0.9882352948188782, 0.9882352948188782), (0.5, 0.9843137264251709, 0.9843137264251709), (0.75, 0.7960784435272217, 0.7960784435272217), (1.0, 0.40392157435417175, 0.40392157435417175)]
 }
 
-mymap = mpl.colors.LinearSegmentedColormap('my_colormap', cdict, 1024)
+mymap = colors.LinearSegmentedColormap('my_colormap', cdict, 1024)
 
 
 class PlayerInfo(object):
@@ -210,17 +213,15 @@ class PlayerInfo(object):
         hb_shot = plt.hexbin(x, y, gridsize=gridnum, extent=(-250, 250, 425, -50))
         plt.close()
 
-        # Compute number of shots taken from each hexbin location
+        # Compute number of shots made from each hexbin location
         hb_made = plt.hexbin(x_made, y_made, gridsize=gridnum, extent=(-250, 250, 425, -50))
         plt.close()
 
         # Compute shooting percentage, effectively calculating FGA / FGM
         shooting_pct_locations = hb_made.get_array() / hb_shot.get_array()
-        print(shooting_pct_locations)
 
         # If a player takes 0 shots, make sure both FGA and FGM are set to 0 to null the data point
-        shooting_pct_locations[np.isnan(shooting_pct_locations)] = 0
-        print(shooting_pct_locations)
+        shooting_pct_locations[numpy.isnan(shooting_pct_locations)] = 0
         return (shooting_pct_locations, hb_shot)
 
 
@@ -284,7 +285,6 @@ class ShotChart(object):
 
     def create_shot_chart_plot(self, shooting_pct, shot_num, plot_size=(12, 8), gridnum=30):
         """Show plot that has X and Y coordinate values for court."""
-
         # Draw figure and court
         fig = plt.figure(figsize=plot_size)
 
@@ -292,6 +292,7 @@ class ShotChart(object):
         ax = plt.axes([0.1, 0.1, 0.8, 0.8])
         self.draw_court(outer_lines=False)
 
+        # Add main title to graph
         plt.title("Shot chart for{} {} for the last {} games".format(
             self.player_info.player_firstname,
             self.player_info.player_lastname,
@@ -310,7 +311,7 @@ class ShotChart(object):
 
         # Draw color bar to indicate percentage as heatmap
         ax2 = fig.add_axes([0.92, 0.1, 0.02, 0.8])
-        cb = mpl.colorbar.ColorbarBase(ax2, cmap=mymap, orientation='vertical')
+        cb = colorbar.ColorbarBase(ax2, cmap=mymap, orientation='vertical')
         cb.set_label('Shooting %')
         cb.set_ticks([0.0, 0.25, 0.5, 0.75, 1.0])
         cb.set_ticklabels(['0%', '25%', '50%', '75%', '100%'])
